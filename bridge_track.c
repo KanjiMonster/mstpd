@@ -231,8 +231,22 @@ static void set_br_up(bridge_t * br, bool up)
     }
 
     if(changed && br->stp_enabled)
+    {
         MSTP_IN_set_bridge_enable(br, br->sysdeps.up);
+
+        if (!up && have_per_vlan_state)
+        {
+            port_t *prt;
+
+            list_for_each_entry(prt, &br->ports, br_list)
+            {
+                br_set_state(prt->sysdeps.if_index, BR_STATE_DISABLED);
+                /* TODO: vlans to forwarding? */
+            }
+        }
+    }
 }
+
 
 static void set_if_up(port_t *prt, bool up)
 {
@@ -286,8 +300,12 @@ static void set_if_up(port_t *prt, bool up)
         }
     }
     if(changed && prt->bridge->stp_enabled)
+    {
         MSTP_IN_set_port_enable(prt, prt->sysdeps.up, prt->sysdeps.speed,
                                 prt->sysdeps.duplex);
+        if (up && have_per_vlan_state)
+            br_set_state(prt->sysdeps.if_index, BR_STATE_FORWARDING);
+    }
 }
 
 /* br_index == if_index means: interface is bridge master */
@@ -419,7 +437,7 @@ int vlan_notify(int if_index, bool newvlan, __u16 vid, __u8 state)
 	{
             LOG_MSTINAME(ptp, "VID %i: already in desired STP state %i", vid, ptp->state);
             continue;
-	}
+        }
 
         if (0 > br_set_vlan_state(if_index, vid, ptp->state))
         {
