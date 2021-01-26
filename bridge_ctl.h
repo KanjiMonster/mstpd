@@ -31,6 +31,9 @@
 #include <net/if.h>
 #include <linux/if_ether.h>
 
+/* VLAN not present */
+#define VLAN_STATE_UNASSIGNED	0xff
+
 typedef struct
 {
     int if_index;
@@ -48,6 +51,9 @@ typedef struct
 
     bool up;
     int speed, duplex;
+
+    /* current per vlan state */
+    __u8 vlan_state[4095];
 } sysdep_if_data_t;
 
 #define GET_PORT_SPEED(port)    ((port)->sysdeps.speed)
@@ -80,14 +86,21 @@ typedef struct
           __PRETTY_FUNCTION__, _ptp->port->bridge->sysdeps.name,     \
          _ptp->port->sysdeps.name, __be16_to_cpu(ptp->MSTID), ##_args)
 
+extern bool have_per_vlan_state;
+
 int init_bridge_ops(void);
 
 int br_set_state(unsigned ifindex, __u8 state);
+int br_set_vlan_state(unsigned ifindex, __u16 vid, __u8 state);
 
 int bridge_notify(int br_index, int if_index, bool newlink, unsigned flags);
 
 void bridge_bpdu_rcv(int ifindex, const unsigned char *data, int len);
 
 void bridge_one_second(void);
+
+int vlan_notify(int if_index, bool newvlan, __u16 vid, __u8 state);
+
+int fill_vlan_table(int if_index, __u8 *vlan_table);
 
 #endif /* BRIDGE_CTL_H */

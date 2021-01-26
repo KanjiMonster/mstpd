@@ -19,6 +19,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <string.h>
 #include <linux/if_bridge.h>
 #include <linux/rtnetlink.h>
 
@@ -63,6 +64,8 @@ static struct epoll_event_handler br_handler;
 static struct mnl_socket *mnl_state;
 static int state_seq;
 
+bool have_per_vlan_state = 1;
+
 static int mnl_talk(struct mnl_socket *nl, struct nlmsghdr *msg,
 		    struct nlmsghdr **answer)
 {
@@ -98,6 +101,33 @@ static int mnl_talk(struct mnl_socket *nl, struct nlmsghdr *msg,
     }
 
     return 0;
+}
+
+int br_set_vlan_state(unsigned ifindex, __u16 vid, __u8 state)
+{
+    char buf[MNL_SOCKET_BUFFER_SIZE];
+    struct br_vlan_msg *bvm;
+    struct nlmsghdr *n;
+    struct bridge_vlan_info vlan_info;
+    struct nlattr *entry;
+
+    LOG("ifindex %d vid %d state %d", ifindex, vid, state);
+
+
+    n = mnl_nlmsg_put_header(buf);
+    n->nlmsg_type = RTM_NEWVLAN;
+    n->nlmsg_flags = NLM_F_REQUEST | NLM_F_REPLACE;
+    bvm = mnl_nlmsg_put_extra_header(n, sizeof(*bvm));
+    bvm->family = AF_BRIDGE;
+    bvm->ifindex = ifindex;
+
+
+    entry = mnl_attr_nest_start(n, BRIDGE_VLANDB_ENTRY);
+    mnl_attr_put(n, BRIDGE_VLANDB_ENTRY_INFO, sizeof(vlan_info), &vlan_info);
+    mnl_attr_put_u8(n, BRIDGE_VLANDB_ENTRY_STATE, state);
+    mnl_attr_nest_end(n, entry);
+
+    return mnl_talk(mnl_state, n, NULL);
 }
 
 int br_set_state(unsigned ifindex, __u8 state)
@@ -250,6 +280,183 @@ static int link_cb(const struct nlmsghdr *n, void *data)
     return 0;
 }
 
+static const enum mnl_attr_data_type vlandb_policy[BRIDGE_VLANDB_ENTRY_MAX + 1] =
+{
+    [BRIDGE_VLANDB_ENTRY_INFO] = MNL_TYPE_BINARY,
+    [BRIDGE_VLANDB_ENTRY_STATE] = MNL_TYPE_U8,
+    [BRIDGE_VLANDB_ENTRY_RANGE] = MNL_TYPE_U16,
+};
+
+static int vlandb_entry_cb(const struct nlattr *attr, void *data)
+{
+    const struct nlattr **tb = data;
+    int type = mnl_attr_get_type(attr);
+
+    if (mnl_attr_type_valid(attr, BRIDGE_VLANDB_ENTRY_MAX) < 0)
+	    return MNL_CB_OK;
+
+    if (mnl_attr_validate(attr, vlandb_policy[type]) < 0)
+	    return MNL_CB_ERROR;
+
+    tb[type] = attr;
+    return MNL_CB_OK;
+}
+
+static int vlan_cb(const struct nlmsghdr *n, void *data)
+{
+    struct br_vlan_msg *bvm = NLMSG_DATA(n);
+    struct nlattr *attr;
+    bool newvlan = n->nlmsg_type == RTM_NEWVLAN;
+
+    mnl_attr_for_each(attr, n, sizeof(*bvm))
+    {
+        struct nlattr *tb[BRIDGE_VLANDB_ENTRY_MAX +1];
+        struct bridge_vlan_info *info = NULL;
+        uint8_t state = VLAN_STATE_UNASSIGNED;
+        uint16_t range = 0;
+        uint16_t i;
+
+        if (mnl_attr_get_type(attr) != BRIDGE_VLANDB_ENTRY)
+            continue;
+
+	mnl_attr_parse_nested(attr, vlandb_entry_cb, tb);
+
+        if (tb[BRIDGE_VLANDB_ENTRY_INFO])
+            info = mnl_attr_get_payload(tb[BRIDGE_VLANDB_ENTRY_INFO]);
+        if (tb[BRIDGE_VLANDB_ENTRY_STATE])
+            state = mnl_attr_get_u8(tb[BRIDGE_VLANDB_ENTRY_STATE]);
+        if (tb[BRIDGE_VLANDB_ENTRY_RANGE])
+            range = mnl_attr_get_u16(tb[BRIDGE_VLANDB_ENTRY_RANGE]);
+
+        if (!info)
+            continue;
+
+        if (!range)
+            range = info->vid;
+
+        for (i = info->vid; i <= range; i++)
+            vlan_notify(bvm->ifindex, newvlan, i, state);
+    }
+
+    return 0;
+}
+
+struct vlan_dump_table {
+    int if_index;
+    uint8_t *table;
+};
+
+static int vlan_table_cb(const struct nlmsghdr *n, void *data)
+{
+    struct br_vlan_msg *bvm = NLMSG_DATA(n);
+    struct nlattr *attr;
+    struct vlan_dump_table *req = data;
+
+    if (bvm->ifindex != req->if_index)
+            return 0;
+
+    mnl_attr_for_each(attr, n, sizeof(*bvm))
+    {
+        struct nlattr *tb[BRIDGE_VLANDB_ENTRY_MAX +1];
+        struct bridge_vlan_info *info = NULL;
+        uint8_t state = VLAN_STATE_UNASSIGNED;
+        uint16_t range = 0;
+        uint16_t i;
+
+        if (mnl_attr_get_type(attr) != BRIDGE_VLANDB_ENTRY)
+            continue;
+
+	mnl_attr_parse_nested(attr, vlandb_entry_cb, tb);
+
+        if (tb[BRIDGE_VLANDB_ENTRY_INFO])
+            info = mnl_attr_get_payload(tb[BRIDGE_VLANDB_ENTRY_INFO]);
+        if (tb[BRIDGE_VLANDB_ENTRY_STATE])
+            state = mnl_attr_get_u8(tb[BRIDGE_VLANDB_ENTRY_STATE]);
+        if (tb[BRIDGE_VLANDB_ENTRY_RANGE])
+            range = mnl_attr_get_u16(tb[BRIDGE_VLANDB_ENTRY_RANGE]);
+
+        if (!info)
+            continue;
+
+        if (!range)
+            range = info->vid;
+
+        for (i = info->vid; i <= range; i++)
+            req->table[i] = state;
+    }
+
+    return 0;
+}
+
+static int msg_cb(const struct nlmsghdr *n, void *data)
+{
+    switch (n->nlmsg_type)
+    {
+        case RTM_NEWLINK:
+        case RTM_DELLINK:
+            return link_cb(n, data);
+        case RTM_NEWVLAN:
+        case RTM_DELVLAN:
+            return vlan_cb(n, data);
+        default:
+            return 0;
+    }
+}
+
+int fill_vlan_table(int if_index, uint8_t *vlan_table)
+{
+    char buf[MNL_SOCKET_DUMP_SIZE];
+    unsigned int seq, portid;
+    struct nlmsghdr *nlh;
+    int ret;
+    struct br_vlan_msg *bvm;
+    struct vlan_dump_table req = {
+        .if_index = if_index,
+        .table = vlan_table,
+    };
+
+    if(!have_per_vlan_state)
+        return 0;
+
+    nlh = mnl_nlmsg_put_header(buf);
+    nlh->nlmsg_type = RTM_GETVLAN;
+    nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+    nlh->nlmsg_seq = seq = time(NULL);
+
+    bvm = mnl_nlmsg_put_extra_header(nlh, sizeof(*bvm));
+    bvm->family = PF_BRIDGE;
+
+    portid = mnl_socket_get_portid(mnl);
+
+    ret = mnl_socket_sendto(mnl, nlh, nlh->nlmsg_len);
+    if (ret < 0)
+    {
+        ERROR("Cannot send dump request: %m");
+	return -1;
+    }
+
+    ret = mnl_socket_recvfrom(mnl, buf, sizeof(buf));
+    while (ret > 0)
+    {
+    /* For unknown reason setting ifindex to non-zero will cause the kernel
+     * to flood us with the same message over and over again, so filter
+     * within mstpd for now */
+        ret = mnl_cb_run(buf, ret, seq, portid, vlan_table_cb, &req);
+	if (ret <= MNL_CB_STOP)
+		break;
+
+	ret = mnl_socket_recvfrom(mnl, buf, sizeof(buf));
+    }
+
+    if (ret == -1)
+    {
+        ERROR("Failed receiving dump request: %m");
+	return -1;
+    }
+
+    return 0;
+}
+
 static inline void br_ev_handler(uint32_t events, struct epoll_event_handler *h)
 {
     char buf[MNL_SOCKET_BUFFER_SIZE];
@@ -260,7 +467,7 @@ static inline void br_ev_handler(uint32_t events, struct epoll_event_handler *h)
     ret = mnl_socket_recvfrom(mnl, buf, sizeof(buf));
     while (ret > 0)
     {
-        ret = mnl_cb_run(buf, ret, 0, 0, link_cb, NULL);
+        ret = mnl_cb_run(buf, ret, 0, 0, msg_cb, NULL);
 	if (ret <= MNL_CB_STOP)
 		break;
 
@@ -320,6 +527,7 @@ static int br_linkdump(struct mnl_socket *mnl, int family)
 
 int init_bridge_ops(void)
 {
+    unsigned int group = RTNLGRP_BRVLAN;
     int fd;
 
     mnl = mnl_socket_open(NETLINK_ROUTE);
@@ -333,6 +541,12 @@ int init_bridge_ops(void)
     {
         ERROR("Couldn't bind rtnl socket to RTMGRP_LINK: %m");
         return -1;
+    }
+
+    if(mnl_socket_setsockopt(mnl, NETLINK_ADD_MEMBERSHIP, &group, sizeof(&group)) < 0)
+    {
+        ERROR("Couldn't join RTNLGRP_BRVLAN, per vlan STP state not available\n");
+        have_per_vlan_state = 0;
     }
 
     mnl_state = mnl_socket_open(NETLINK_ROUTE);
