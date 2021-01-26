@@ -350,9 +350,9 @@ static int vlan_table_cb(const struct nlmsghdr *n, void *data)
 {
     struct br_vlan_msg *bvm = NLMSG_DATA(n);
     struct nlattr *attr;
-    struct vlan_dump_table *req = data;
+    sysdep_if_data_t *if_data = data;
 
-    if (bvm->ifindex != req->if_index)
+    if (bvm->ifindex != if_data->if_index)
             return 0;
 
     mnl_attr_for_each(attr, n, sizeof(*bvm))
@@ -382,7 +382,7 @@ static int vlan_table_cb(const struct nlmsghdr *n, void *data)
             range = info->vid;
 
         for (i = info->vid; i <= range; i++)
-            req->table[i] = state;
+            if_data->vlan_state[i] = state;
     }
 
     return 0;
@@ -403,17 +403,13 @@ static int msg_cb(const struct nlmsghdr *n, void *data)
     }
 }
 
-int fill_vlan_table(int if_index, uint8_t *vlan_table)
+int fill_vlan_table(sysdep_if_data_t *if_data)
 {
     char buf[MNL_SOCKET_DUMP_SIZE];
     unsigned int seq, portid;
     struct nlmsghdr *nlh;
     int ret;
     struct br_vlan_msg *bvm;
-    struct vlan_dump_table req = {
-        .if_index = if_index,
-        .table = vlan_table,
-    };
 
     if(!have_per_vlan_state)
         return 0;
@@ -441,7 +437,7 @@ int fill_vlan_table(int if_index, uint8_t *vlan_table)
     /* For unknown reason setting ifindex to non-zero will cause the kernel
      * to flood us with the same message over and over again, so filter
      * within mstpd for now */
-        ret = mnl_cb_run(buf, ret, seq, portid, vlan_table_cb, &req);
+        ret = mnl_cb_run(buf, ret, seq, portid, vlan_table_cb, if_data);
 	if (ret <= MNL_CB_STOP)
 		break;
 

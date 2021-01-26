@@ -109,7 +109,7 @@ static port_t * create_if(bridge_t * br, int if_index)
     }
 
     memset(prt->sysdeps.vlan_state, VLAN_STATE_UNASSIGNED, sizeof(prt->sysdeps.vlan_state));
-    fill_vlan_table(if_index, prt->sysdeps.vlan_state);
+    fill_vlan_table(&prt->sysdeps);
 
     INFO("Add iface %s as port#%d to bridge %s", prt->sysdeps.name,
          portno, br->sysdeps.name);
@@ -445,7 +445,7 @@ int vlan_notify(int if_index, bool newvlan, __u16 vid, __u8 state)
     {
       if (0 > br_set_vlan_state(if_index, vid, ptp->state))
       {
-          ERROR_MSTINAME(br, prt, ptp, "VID %i: failed setting STP state %i in kernel", vid, ptp->state);
+          ERROR_MSTINAME(ptp, "VID %i: failed setting STP state %i in kernel", vid, ptp->state);
           return -1;
       }
     }
