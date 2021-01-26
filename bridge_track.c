@@ -573,7 +573,7 @@ void MSTP_OUT_set_state(per_tree_port_t *ptp, int new_state)
         bridge_t *br = prt->bridge;
         int i;
 
-        for (i = 0; i <= MAX_VID; i++)
+        for (i = 1; i <= MAX_VID; i++)
         {
             __u16 fid = br->vid2fid[i];
 
