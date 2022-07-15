@@ -422,16 +422,16 @@ int fill_vlan_table(sysdep_if_data_t *if_data)
     bvm = mnl_nlmsg_put_extra_header(nlh, sizeof(*bvm));
     bvm->family = PF_BRIDGE;
 
-    portid = mnl_socket_get_portid(mnl);
+    portid = mnl_socket_get_portid(mnl_state);
 
-    ret = mnl_socket_sendto(mnl, nlh, nlh->nlmsg_len);
+    ret = mnl_socket_sendto(mnl_state, nlh, nlh->nlmsg_len);
     if (ret < 0)
     {
         ERROR("Cannot send dump request: %m");
 	return -1;
     }
 
-    ret = mnl_socket_recvfrom(mnl, buf, sizeof(buf));
+    ret = mnl_socket_recvfrom(mnl_state, buf, sizeof(buf));
     while (ret > 0)
     {
     /* For unknown reason setting ifindex to non-zero will cause the kernel
@@ -441,7 +441,7 @@ int fill_vlan_table(sysdep_if_data_t *if_data)
 	if (ret <= MNL_CB_STOP)
 		break;
 
-	ret = mnl_socket_recvfrom(mnl, buf, sizeof(buf));
+	ret = mnl_socket_recvfrom(mnl_state, buf, sizeof(buf));
     }
 
     if (ret == -1)
