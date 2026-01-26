@@ -243,7 +243,7 @@ bool MSTP_IN_bridge_create(bridge_t *br, __u8 *macaddr)
     INIT_LIST_HEAD(&br->ports);
     INIT_LIST_HEAD(&br->trees);
     br->bridgeEnabled = false;
-    memset(br->vid2fid, 0, sizeof(br->vid2fid));
+    memset(br->vid2fid, 1, sizeof(br->vid2fid));
     memset(br->fid2mstid, 0, sizeof(br->fid2mstid));
     assign(br->MstConfigId.s.selector, (__u8)0);
     sprintf((char *)br->MstConfigId.s.configuration_name,
@@ -1296,7 +1296,7 @@ bool MSTP_IN_set_vid2fid(bridge_t *br, __u16 vid, __u16 fid)
 {
     bool vid2mstid_changed;
 
-    if((vid < 1) || (vid > MAX_VID) || (fid > MAX_FID))
+    if((vid < 1) || (vid > MAX_VID) || (fid < 1) || (fid > MAX_FID))
     {
         ERROR_BRNAME(br, "Error allocating VID(%hu) to FID(%hu)", vid, fid);
         return false;
@@ -1323,7 +1323,7 @@ bool MSTP_IN_set_all_vids2fids(bridge_t *br, __u16 *vids2fids)
     vid2mstid_changed = false;
     for(vid = 1; vid <= MAX_VID; ++vid)
     {
-        if(vids2fids[vid] > MAX_FID)
+        if((vids2fids[vid] < 1) || (vids2fids[vid] > MAX_FID))
         { /* Incorrect value == keep prev value */
             vids2fids[vid] = br->vid2fid[vid];
             continue;
@@ -1349,7 +1349,7 @@ bool MSTP_IN_set_fid2mstid(bridge_t *br, __u16 fid, __u16 mstid)
     bool found;
     int vid;
 
-    if(fid > MAX_FID)
+    if((fid < 1) || (fid > MAX_FID))
     {
         ERROR_BRNAME(br, "Bad FID(%hu)", fid);
         return false;
@@ -1398,7 +1398,7 @@ bool MSTP_IN_set_all_fids2mstids(bridge_t *br, __u16 *fids2mstids)
     int fid, vid;
     __be16 prev_vid2mstid[MAX_VID + 2];
 
-    for(fid = 0; fid <= MAX_FID; ++fid)
+    for(fid = 1; fid <= MAX_FID; ++fid)
     {
         if(fids2mstids[fid] > MAX_MSTID)
         { /* Incorrect value == keep prev value */
@@ -1557,7 +1557,7 @@ bool MSTP_IN_delete_msti(bridge_t *br, __u16 mstid)
     }
 
     /* Check if there are FIDs associated with this MSTID */
-    for(fid = 0; fid <= MAX_FID; ++fid)
+    for(fid = 1; fid <= MAX_FID; ++fid)
     {
         if(br->fid2mstid[fid] == MSTID)
         {
