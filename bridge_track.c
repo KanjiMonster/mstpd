@@ -40,6 +40,7 @@
 #include "mstp.h"
 #include "driver.h"
 #include "libnetlink.h"
+#include "driver.h"
 
 #ifndef SYSFS_CLASS_NET
 #define SYSFS_CLASS_NET "/sys/class/net"
@@ -57,6 +58,9 @@ static bridge_t * create_br(int if_index)
     if (!index_to_name(if_index, br->sysdeps.name))
         goto err;
     if (get_hwaddr(br->sysdeps.name, br->sysdeps.macaddr))
+        goto err;
+
+    if (!driver_create_bridge(br, br->sysdeps.macaddr))
         goto err;
 
     INFO("Add bridge %s", br->sysdeps.name);
@@ -108,6 +112,8 @@ static port_t * create_if(bridge_t * br, int if_index)
     INFO("Add iface %s as port#%d to bridge %s", prt->sysdeps.name,
          portno, br->sysdeps.name);
     prt->bridge = br;
+    if (!driver_create_port(prt, portno))
+        goto err;
     if(!MSTP_IN_port_create_and_add_tail(prt, portno))
         goto err;
 
@@ -130,6 +136,7 @@ static port_t * find_if(bridge_t * br, int if_index)
 
 static inline void delete_if(port_t *prt)
 {
+    driver_delete_port(prt);
     MSTP_IN_delete_port(prt);
     free(prt);
 }
@@ -152,6 +159,7 @@ static bool delete_br_byindex(int if_index)
     INFO("Delete bridge %s (%d)", br->sysdeps.name, if_index);
 
     list_del(&br->list);
+    driver_delete_bridge(br);
     MSTP_IN_delete_bridge(br);
     free(br);
     return true;
