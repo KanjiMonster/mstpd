@@ -148,6 +148,8 @@ typedef enum {
     PARAM_ADMINEDGEPORT,
     PARAM_AUTOEDGEPORT,
     PARAM_OPEREDGEPORT,
+    PARAM_AUTOISOLATEPORT,
+    PARAM_ISOLATEPORT,
     PARAM_TOPCHNGACK,
     PARAM_P2P,
     PARAM_ADMINP2P,
@@ -696,6 +698,8 @@ static const cmd_param_t cist_port_params[] = {
     { PARAM_ADMINEDGEPORT,  "admin-edge-port" },
     { PARAM_AUTOEDGEPORT,   "auto-edge-port" },
     { PARAM_OPEREDGEPORT,   "oper-edge-port" },
+    { PARAM_AUTOISOLATEPORT,"auto-isolate-port" },
+    { PARAM_ISOLATEPORT,    "isolate-port" },
     { PARAM_TOPCHNGACK,     "topology-change-ack" },
     { PARAM_P2P,            "point-to-point" },
     { PARAM_ADMINP2P,       "admin-point-to-point" },
@@ -767,6 +771,10 @@ static int do_showport_fmt_plain(const CIST_PortStatus *s,
                        BOOL_STR(s->auto_edge_port));
                 printf("  oper edge port     %-23s ",
                        BOOL_STR(s->oper_edge_port));
+                printf("auto isolate port    %s\n",
+                       BOOL_STR(s->auto_isolate_port));
+                printf("  isolate port       %-23s ",
+                       BOOL_STR(s->isolate_port));
                 printf("topology change ack  %s\n", BOOL_STR(s->tc_ack));
                 printf("  point-to-point     %-23s ", BOOL_STR(s->oper_p2p));
                 printf("admin point-to-point %s\n",
@@ -806,7 +814,7 @@ static int do_showport_fmt_plain(const CIST_PortStatus *s,
                 printf("%c%c %-5s "PRT_ID_FMT" %4s "BR_ID_FMT" "BR_ID_FMT" "
                                                     PRT_ID_FMT" %s\n",
                        (s->oper_p2p) ? ' ' : '*',
-                       (s->oper_edge_port) ? 'E' : ' ',
+                       (s->oper_edge_port) ? 'E' : ((s->isolate_port) ? 'I': ' '),
                        port_name,
                        PRT_ID_ARGS(s->port_id),
                        s->enabled ? SHORT_STATE_STR(s->state) : "down",
@@ -866,6 +874,12 @@ static int do_showport_fmt_plain(const CIST_PortStatus *s,
             break;
         case PARAM_OPEREDGEPORT:
             printf("%s\n", BOOL_STR(s->oper_edge_port));
+            break;
+        case PARAM_AUTOISOLATEPORT:
+            printf("%s\n", BOOL_STR(s->auto_isolate_port));
+            break;
+        case PARAM_ISOLATEPORT:
+            printf("%s\n", BOOL_STR(s->isolate_port));
             break;
         case PARAM_TOPCHNGACK:
             printf("%s\n", BOOL_STR(s->tc_ack));
@@ -993,6 +1007,10 @@ static int do_showport_fmt_json(const CIST_PortStatus *s,
                        BOOL_STR(s->auto_edge_port));
                 printf("\"oper-edge-port\":\"%s\",",
                        BOOL_STR(s->oper_edge_port));
+                printf("\"auto-isolate-port\":\"%s\",",
+                       BOOL_STR(s->auto_isolate_port));
+                printf("\"isolate-port\":\"%s\",",
+                       BOOL_STR(s->isolate_port));
                 printf("\"topology-change-ack\":\"%s\",",
                        BOOL_STR(s->tc_ack));
                 printf("\"point-to-point\":\"%s\",",
@@ -1048,6 +1066,7 @@ static int do_showport_fmt_json(const CIST_PortStatus *s,
                        "\"bridge\":\"%s\","
                        "\"point-to-point\":\"%s\","
                        "\"oper-edge-port\":\"%s\","
+                       "\"isolate-port\":\"%s\","
                        "\"port-id\":\""PRT_ID_FMT"\","
                        "\"enabled\":\"%s\","
                        "\"state\":\"%s\","
@@ -1060,6 +1079,7 @@ static int do_showport_fmt_json(const CIST_PortStatus *s,
                        bridge_name,
                        BOOL_STR(s->oper_p2p),
                        BOOL_STR(s->oper_edge_port),
+                       BOOL_STR(s->isolate_port),
                        PRT_ID_ARGS(s->port_id),
                        BOOL_STR(s->enabled),
                        STATE_STR(s->state),
@@ -1663,6 +1683,17 @@ static int cmd_setportautoedge(int argc, char *const *argv)
     if(0 > port_index)
         return port_index;
     return set_port_cfg(auto_edge_port, getyesno(argv[3], "yes", "no"));
+}
+
+static int cmd_setportautoisolate(int argc, char *const *argv)
+{
+    int br_index = get_index(argv[1], "bridge");
+    if(0 > br_index)
+        return br_index;
+    int port_index = get_index(argv[2], "port");
+    if(0 > port_index)
+        return port_index;
+    return set_port_cfg(auto_isolate_port, getyesno(argv[3], "yes", "no"));
 }
 
 static int cmd_setportp2p(int argc, char *const *argv)
@@ -2305,6 +2336,8 @@ static const struct command commands[] =
      "<bridge> <port> {yes|no}", "Set initial edge state"},
     {3, 0, "setportautoedge", cmd_setportautoedge,
      "<bridge> <port> {yes|no}", "Enable auto transition to/from edge state"},
+    {3, 0, "setportautoisolate", cmd_setportautoisolate,
+     "<bridge> <port> {yes|no}", "Enable auto transition to/from isolated state"},
     {3, 0, "setportp2p", cmd_setportp2p,
      "<bridge> <port> {yes|no|auto}", "Set p2p detection mode"},
     {3, 0, "setportrestrrole", cmd_setportrestrrole,

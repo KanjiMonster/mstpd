@@ -297,6 +297,8 @@ bool MSTP_IN_port_create_and_add_tail(port_t *prt, __u16 portno)
     assign(prt->ExternalPortPathCost, MAX_PATH_COST); /* 13.37.1 */
     prt->AdminEdgePort = false; /* 13.25 */
     prt->AutoEdge = true;       /* 13.25 */
+    prt->AutoIsolate = false;
+    prt->isolate = false;
     prt->BpduGuardPort = false;
     prt->BpduGuardError = false;
     prt->NetworkPort = false;
@@ -1009,6 +1011,8 @@ void MSTP_IN_get_cist_port_status(port_t *prt, CIST_PortStatus *status)
     status->admin_edge_port = prt->AdminEdgePort;
     status->auto_edge_port = prt->AutoEdge;
     status->oper_edge_port = prt->operEdge;
+    status->auto_isolate_port = prt->AutoIsolate;
+    status->isolate_port = prt->isolate;
     status->enabled = prt->portEnabled;
     status->admin_p2p = prt->AdminP2P;
     status->oper_p2p = prt->operPointToPointMAC;
@@ -1150,6 +1154,15 @@ int MSTP_IN_set_cist_port_config(port_t *prt, CIST_PortConfig *cfg)
         if(prt->AutoEdge != cfg->auto_edge_port)
         {
             prt->AutoEdge = cfg->auto_edge_port;
+            changed = true;
+        }
+    }
+
+    if(cfg->set_auto_isolate_port)
+    {
+        if(prt->AutoIsolate != cfg->auto_isolate_port)
+        {
+            prt->AutoIsolate = cfg->auto_isolate_port;
             changed = true;
         }
     }
@@ -2925,6 +2938,7 @@ static void PRSM_to_RECEIVE(port_t *prt)
     setRcvdMsgs(prt);
     prt->operEdge = false;
     prt->rcvdBpdu = false;
+    prt->isolate = false;
     assign(prt->edgeDelayWhile, prt->bridge->Migrate_Time);
 
     /* No need to run, no one condition will be met
@@ -3069,6 +3083,7 @@ static void BDSM_to_EDGE(port_t *prt/*, bool begin*/)
     prt->BDSM_state = BDSM_EDGE;
 
     prt->operEdge = true;
+    prt->isolate = false;
 
     /* No need to run, no one condition will be met
      * if(!begin)
@@ -3080,6 +3095,19 @@ static void BDSM_to_NOT_EDGE(port_t *prt/*, bool begin*/)
     prt->BDSM_state = BDSM_NOT_EDGE;
 
     prt->operEdge = false;
+    prt->isolate = false;
+
+    /* No need to run, no one condition will be met
+     * if(!begin)
+     *     BDSM_run(prt, false); */
+}
+
+static void BDSM_to_ISOLATED(port_t *prt/*, bool begin*/)
+{
+    prt->BDSM_state = BDSM_ISOLATED;
+
+    prt->operEdge = false;
+    prt->isolate = true;
 
     /* No need to run, no one condition will be met
      * if(!begin)
@@ -3126,6 +3154,23 @@ static bool BDSM_run(port_t *prt, bool dry_run)
                 if(dry_run) /* state change */
                     return true;
                 BDSM_to_EDGE(prt);
+            }
+            if((0 == prt->edgeDelayWhile) && !prt->AdminEdgePort
+               && !prt->AutoEdge && prt->sendRSTP && cist->proposing
+               && prt->operPointToPointMAC)
+            {
+                if(dry_run) /* state change */
+                    return true;
+                BDSM_to_ISOLATED(prt);
+            }
+            return false;
+        case BDSM_ISOLATED:
+            if(prt->AdminEdgePort || prt->AutoEdge || !prt->isolate
+               || !prt->operPointToPointMAC)
+            {
+                if(dry_run) /* state change */
+                    return true;
+                BDSM_to_NOT_EDGE(prt);
             }
         default:
             return false;
@@ -4058,7 +4103,15 @@ static void PRTSM_to_DESIGNATED_PORT(per_tree_port_t *ptp)
     PRTSM_LOG("");
     ptp->PRTSM_state = PRTSM_DESIGNATED_PORT;
 
+    port_t *prt = ptp->port;
+
     ptp->role = roleDesignated;
+
+    if(0 == ptp->MSTID)
+    {
+       ptp->proposing = ptp->proposing ||
+                        (!prt->AdminEdgePort && !prt->AutoEdge && prt->AutoIsolate && prt->operPointToPointMAC);
+    }
 
     PRTSM_runr(ptp, true, false /* actual run */);
 }

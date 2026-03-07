@@ -263,7 +263,8 @@ typedef enum
 typedef enum
 {
     BDSM_EDGE,
-    BDSM_NOT_EDGE
+    BDSM_NOT_EDGE,
+    BDSM_ISOLATED
 } BDSM_states_t;
 
 /* 13.31  Port Transmit state machine */
@@ -458,7 +459,7 @@ typedef struct
 
     /* 13.24.(b,c,e,f,g,j,k,l,m,n,o,p,q,r,aw) Per-port variables */
     unsigned int txCount;
-    bool operEdge, portEnabled, infoInternal, rcvdInternal;
+    bool operEdge, portEnabled, infoInternal, rcvdInternal, isolate;
     bool mcheck, rcvdBpdu, rcvdRSTP, rcvdSTP, rcvdTcAck, rcvdTcn, sendRSTP;
     bool tcAck, newInfo, newInfoMsti;
 
@@ -472,6 +473,7 @@ typedef struct
     admin_p2p_t AdminP2P; /* 6.4.3 */
     bool AdminEdgePort; /* 13.22.k */
     bool AutoEdge; /* 13.22.m */
+    bool AutoIsolate;
     bool BpduGuardPort;
     bool BpduGuardError;
     bool NetworkPort;
@@ -687,6 +689,9 @@ typedef struct
     bool admin_edge_port;
     bool auto_edge_port; /* not in standard */
     bool oper_edge_port;
+    /* 802.1Q-2022 fragile bridges */
+    bool auto_isolate_port;
+    bool isolate_port;
     /* 802.1Q-2005 wants here MAC_Enabled & MAC_Operational. We don't know
      * neither of these. Return portEnabled and feel happy. */
     bool enabled;
@@ -760,6 +765,9 @@ typedef struct
 
     bool auto_edge_port; /* not in standard */
     bool set_auto_edge_port;
+
+    bool auto_isolate_port;
+    bool set_auto_isolate_port;
 
     admin_p2p_t admin_p2p;
     bool set_admin_p2p;
