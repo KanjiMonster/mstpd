@@ -155,6 +155,7 @@ typedef enum {
     PARAM_RESTRTCN,
     PARAM_PORTHELLOTIME,
     PARAM_DISPUTED,
+    PARAM_ENABLEBPDURX,
     PARAM_BPDUGUARDPORT,
     PARAM_BPDUGUARDERROR,
     PARAM_BPDUFILTERPORT,
@@ -703,6 +704,7 @@ static const cmd_param_t cist_port_params[] = {
     { PARAM_RESTRTCN,       "restricted-TCN" },
     { PARAM_PORTHELLOTIME,  "port-hello-time" },
     { PARAM_DISPUTED,       "disputed" },
+    { PARAM_ENABLEBPDURX,   "enable-bpdu-rx" },
     { PARAM_BPDUGUARDPORT,  "bpdu-guard-port" },
     { PARAM_BPDUGUARDERROR, "bpdu-guard-error" },
     { PARAM_BPDUFILTERPORT, "bpdu-filter-port" },
@@ -777,6 +779,8 @@ static int do_showport_fmt_plain(const CIST_PortStatus *s,
                        BOOL_STR(s->restricted_tcn));
                 printf("  port hello time    %-23hhu ", s->port_hello_time);
                 printf("disputed             %s\n", BOOL_STR(s->disputed));
+                printf("  enable BPDU rx       %s\n",
+                       BOOL_STR(s->enable_bpdu_rx));
                 printf("  bpdu guard port    %-23s ",
                        BOOL_STR(s->bpdu_guard_port));
                 printf("bpdu guard error     %s\n",
@@ -785,9 +789,7 @@ static int do_showport_fmt_plain(const CIST_PortStatus *s,
                        BOOL_STR(s->network_port));
                 printf("BA inconsistent      %s\n",
                        BOOL_STR(s->ba_inconsistent));
-                printf("  bpdu filter port   %-23s ",
-                       BOOL_STR(s->bpdu_filter_port));
-                printf("Num RX BPDU Filtered %u\n", s->num_rx_bpdu_filtered);
+                printf("  Num RX BPDU Filtered %u\n", s->num_rx_bpdu_filtered);
                 printf("  Num TX BPDU        %-23u ", s->num_tx_bpdu);
                 printf("Num TX TCN           %u\n", s->num_tx_tcn);
                 printf("  Num RX BPDU        %-23u ", s->num_rx_bpdu);
@@ -888,6 +890,9 @@ static int do_showport_fmt_plain(const CIST_PortStatus *s,
         case PARAM_DISPUTED:
             printf("%s\n", BOOL_STR(s->disputed));
             break;
+        case PARAM_ENABLEBPDURX:
+            printf("%s\n", BOOL_STR(s->enable_bpdu_rx));
+            break;
         case PARAM_BPDUGUARDPORT:
             printf("%s\n", BOOL_STR(s->bpdu_guard_port));
             break;
@@ -895,7 +900,7 @@ static int do_showport_fmt_plain(const CIST_PortStatus *s,
             printf("%s\n", BOOL_STR(s->bpdu_guard_error));
             break;
         case PARAM_BPDUFILTERPORT:
-            printf("%s\n", BOOL_STR(s->bpdu_filter_port));
+            printf("%s\n", BOOL_STR(!s->enable_bpdu_rx));
             break;
         case PARAM_NETWORKPORT:
             printf("%s\n", BOOL_STR(s->network_port));
@@ -1007,12 +1012,12 @@ static int do_showport_fmt_json(const CIST_PortStatus *s,
                        s->port_hello_time);
                 printf("\"disputed\":\"%s\",",
                        BOOL_STR(s->disputed));
+                printf("\"enable-bpdu-rx\":\"%s\",",
+                       BOOL_STR(s->enable_bpdu_rx));
                 printf("\"bpdu-guard-port\":\"%s\",",
                        BOOL_STR(s->bpdu_guard_port));
                 printf("\"bpdu-guard-error\":\"%s\",",
                        BOOL_STR(s->bpdu_guard_error));
-                printf("\"bpdu-filter-port\":\"%s\",",
-                       BOOL_STR(s->bpdu_filter_port));
                 printf("\"network-port\":\"%s\",",
                        BOOL_STR(s->network_port));
                 printf("\"ba-inconsistent\":\"%s\",",
@@ -1700,6 +1705,17 @@ static int cmd_setportrestrtcn(int argc, char *const *argv)
     return set_port_cfg(restricted_tcn, getyesno(argv[3], "yes", "no"));
 }
 
+static int cmd_setportenablebpdurx(int argc, char *const *argv)
+{
+    int br_index = get_index(argv[1], "bridge");
+    if (0 > br_index)
+        return br_index;
+    int port_index = get_index(argv[2], "port");
+    if (0 > port_index)
+        return port_index;
+    return set_port_cfg(enable_bpdu_rx, getyesno(argv[3], "yes", "no"));
+}
+
 static int cmd_setportbpduguard(int argc, char *const *argv)
 {
     int br_index = get_index(argv[1], "bridge");
@@ -1719,7 +1735,7 @@ static int cmd_setportbpdufilter(int argc, char *const *argv)
     int port_index = get_index(argv[2], "port");
     if (0 > port_index)
         return port_index;
-    return set_port_cfg(bpdu_filter_port, getyesno(argv[3], "yes", "no"));
+    return set_port_cfg(enable_bpdu_rx, !getyesno(argv[3], "yes", "no"));
 }
 
 static int cmd_setportnetwork(int argc, char *const *argv)
@@ -2312,6 +2328,8 @@ static const struct command commands[] =
     {3, 0, "setportrestrtcn", cmd_setportrestrtcn,
      "<bridge> <port> {yes|no}",
      "Restrict port ability to propagate received TCNs"},
+    {3, 0, "setportenablebpdurx", cmd_setportenablebpdurx,
+     "<bridge> <port> {yes|no}", "Disable/Enable receiving BPDUs"},
     {2, 0, "portmcheck", cmd_portmcheck,
      "<bridge> <port>", "Try to get back from STP to rapid (RSTP/MSTP) mode"},
     {3, 0, "setbpduguard", cmd_setportbpduguard,
@@ -2328,7 +2346,7 @@ static const struct command commands[] =
     {3, 0, "setportdonttxmt", cmd_setportdonttxmt,
      "<bridge> <port> {yes|no}", "Disable/Enable sending BPDU"},
     {3, 0, "setportbpdufilter", cmd_setportbpdufilter,
-     "<bridge> <port> {yes|no}", "Set BPDU filter state"},
+     "<bridge> <port> {yes|no}", "Set BPDU filter state (deprecated)"},
 
     /* Other */
     {1, 0, "debuglevel", cmd_debuglevel, "<level>", "Level of verbosity"},
