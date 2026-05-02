@@ -58,7 +58,7 @@ static struct epoll_event_handler br_handler;
 
 struct rtnl_handle rth_state;
 
-static int dump_msg(const struct sockaddr_nl *who, struct nlmsghdr *n,
+static int listen_msg(struct rtnl_ctrl_data *data, struct nlmsghdr *n,
                     void *arg)
 {
     struct ifinfomsg *ifi = NLMSG_DATA(n);
@@ -165,10 +165,14 @@ static int dump_msg(const struct sockaddr_nl *who, struct nlmsghdr *n,
 
     return 0;
 }
+static int dump_msg(struct nlmsghdr *n, void *arg)
+{
+    return listen_msg(NULL, n, arg);
+}
 
 static inline void br_ev_handler(uint32_t events, struct epoll_event_handler *h)
 {
-    if(rtnl_listen(&rth, dump_msg, stdout) < 0)
+    if(rtnl_listen(&rth, listen_msg, stdout) < 0)
     {
         ERROR("Error on bridge monitoring socket\n");
     }
@@ -188,13 +192,13 @@ int init_bridge_ops(void)
         return -1;
     }
 
-    if(rtnl_wilddump_request(&rth, PF_BRIDGE, RTM_GETLINK) < 0)
+    if(rtnl_linkdump_req(&rth, PF_BRIDGE) < 0)
     {
         ERROR("Cannot send dump request: %m\n");
         return -1;
     }
 
-    if(rtnl_dump_filter(&rth, dump_msg, stdout, NULL, NULL) < 0)
+    if(rtnl_dump_filter(&rth, dump_msg, stdout) < 0)
     {
         ERROR("Dump terminated\n");
         return -1;
