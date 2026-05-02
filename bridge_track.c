@@ -449,7 +449,7 @@ static int br_set_state(struct rtnl_handle *rth, unsigned ifindex, __u8 state)
 
     addattr8(&req.n, sizeof(req.buf), IFLA_PROTINFO, state);
 
-    return rtnl_talk(rth, &req.n, 0, 0, NULL, NULL, NULL);
+    return rtnl_talk(rth, &req.n, NULL);
 }
 
 static int br_flush_port(char *ifname)
