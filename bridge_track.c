@@ -517,14 +517,26 @@ void MSTP_OUT_set_state(per_tree_port_t *ptp, int new_state)
             state_name = "disabled";
             break;
     }
+
+    if(!prt->sysdeps.up && (ptp->state != BR_STATE_DISABLED)
+       && (ptp->state != BR_STATE_BLOCKING))
+    {
+       ERROR_MSTINAME(ptp, "trying to set a down port to %s", state_name);
+       return;
+    }
+
     INFO_MSTINAME(ptp, "entering %s state", state_name);
 
     /* Translate new CIST state to the kernel bridge code */
     if(0 == ptp->MSTID)
     { /* CIST */
-        if(0 > br_set_state(&rth_state, prt->sysdeps.if_index, ptp->state))
-            ERROR_PRTNAME(prt, "Couldn't set kernel bridge state %s",
-                          state_name);
+        /* we can only modify STP states of up ports */
+        if(prt->sysdeps.up)
+        {
+            if(0 > br_set_state(&rth_state, prt->sysdeps.if_index, ptp->state))
+                ERROR_PRTNAME(prt, "Couldn't set kernel bridge state %s",
+                              state_name);
+        }
     }
 }
 
