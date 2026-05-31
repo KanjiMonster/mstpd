@@ -4,8 +4,8 @@ sbin_PROGRAMS = mstpd mstpctl
 
 mstpd_SOURCES = \
 	main.c epoll_loop.c epoll_loop.h clock_gettime.h brmon.c \
-	bridge_track.c bridge_track.h driver.h bridge_ctl.h libnetlink.c \
-	libnetlink.h mstp.c mstp.h packet.c packet.h netif_utils.c \
+	bridge_track.c bridge_track.h driver.h bridge_ctl.h \
+	mstp.c mstp.h packet.c packet.h netif_utils.c \
 	netif_utils.h ctl_socket_server.c ctl_socket_server.h hmac_md5.c \
 	list.h log.h driver_deps.c
 
@@ -16,7 +16,7 @@ mstpd_CFLAGS = \
 	-Os -Wall -D_REENTRANT -D__LINUX__ -I. \
 	-D_GNU_SOURCE
 
-mstpd_LDADD = -lmnl
+mstpd_LDADD = $(LIBMNL_LIBS)
 
 if ENABLE_DEVEL
   mstpd_CFLAGS += -g3 -O0 -Werror
