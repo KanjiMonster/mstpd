@@ -78,21 +78,21 @@ static int mnl_talk(struct mnl_socket *nl, struct nlmsghdr *msg,
 	return -1;
     }
 
-    ret = mnl_socket_recvfrom(nl, buf, sizeof(*buf));
-    if (ret < 0)
-    {
-        ERROR("mnl_socket_recvfrom failed: %m");
-	return -1;
-    }
+    if(answer) {
+        ret = mnl_socket_recvfrom(nl, buf, sizeof(*buf));
+        if (ret < 0)
+        {
+            ERROR("mnl_socket_recvfrom failed: %m");
+    	return -1;
+        }
+    
+        ret = mnl_cb_run(buf, ret, seq, mnl_socket_get_portid(nl), NULL, NULL);
+        if (ret < 0)
+        {
+            ERROR("mnl_cb_run failed: %m");
+    	return -1;
+        }
 
-    ret = mnl_cb_run(buf, ret, seq, mnl_socket_get_portid(nl), NULL, NULL);
-    if (ret < 0)
-    {
-        ERROR("mnl_cb_run failed: %m");
-	return -1;
-    }
-
-    if (answer) {
         *answer = malloc(msg->nlmsg_len);
 	memcpy(*answer, buf, msg->nlmsg_len);
     }
