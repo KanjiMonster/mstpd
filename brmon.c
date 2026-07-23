@@ -81,21 +81,22 @@ static int mnl_talk(struct mnl_socket *nl, struct nlmsghdr *msg,
 	return -1;
     }
 
-    if(answer) {
-        ret = mnl_socket_recvfrom(nl, buf, sizeof(*buf));
-        if (ret < 0)
-        {
-            ERROR("mnl_socket_recvfrom failed: %m");
-    	return -1;
-        }
-    
-        ret = mnl_cb_run(buf, ret, seq, mnl_socket_get_portid(nl), NULL, NULL);
-        if (ret < 0)
-        {
-            ERROR("mnl_cb_run failed: %m");
-    	return -1;
-        }
+    ret = mnl_socket_recvfrom(nl, buf, sizeof(*buf));
+    if (ret < 0)
+    {
+        ERROR("mnl_socket_recvfrom failed: %m");
+        return -1;
+    }
 
+    ret = mnl_cb_run(buf, ret, seq, mnl_socket_get_portid(nl), NULL, NULL);
+    if (ret < 0)
+    {
+        ERROR("mnl_cb_run failed: %m");
+        return -1;
+    }
+
+    if (answer)
+    {
         *answer = malloc(msg->nlmsg_len);
 	memcpy(*answer, buf, msg->nlmsg_len);
     }
@@ -116,7 +117,7 @@ int br_set_vlan_state(unsigned ifindex, __u16 vid, __u8 state)
 
     n = mnl_nlmsg_put_header(buf);
     n->nlmsg_type = RTM_NEWVLAN;
-    n->nlmsg_flags = NLM_F_REQUEST | NLM_F_REPLACE;
+    n->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
     bvm = mnl_nlmsg_put_extra_header(n, sizeof(*bvm));
     bvm->family = AF_BRIDGE;
     bvm->ifindex = ifindex;
@@ -140,7 +141,7 @@ int br_set_state(unsigned ifindex, __u8 state)
 
     n = mnl_nlmsg_put_header(buf);
     n->nlmsg_type = RTM_SETLINK;
-    n->nlmsg_flags = NLM_F_REQUEST | NLM_F_REPLACE;
+    n->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
     ifi = mnl_nlmsg_put_extra_header(n, sizeof(*ifi));
     ifi->ifi_family = AF_BRIDGE;
     ifi->ifi_index = ifindex;
