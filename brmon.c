@@ -308,6 +308,8 @@ static int vlan_cb(const struct nlmsghdr *n, void *data)
     struct nlattr *attr;
     bool newvlan = n->nlmsg_type == RTM_NEWVLAN;
 
+    INFO("%d: RTM_%sVLAN ", bvm->ifindex, newvlan ? "NEW" : "DEL");
+
     mnl_attr_for_each(attr, n, sizeof(*bvm))
     {
         struct nlattr *tb[BRIDGE_VLANDB_ENTRY_MAX +1];
@@ -333,6 +335,8 @@ static int vlan_cb(const struct nlmsghdr *n, void *data)
 
         if (!range)
             range = info->vid;
+
+    	INFO("%d %i-%i: %i", bvm->ifindex, info->vid, range, state);
 
         for (i = info->vid; i <= range; i++)
             vlan_notify(bvm->ifindex, newvlan, i, state);
@@ -355,6 +359,8 @@ static int vlan_table_cb(const struct nlmsghdr *n, void *data)
     if (bvm->ifindex != if_data->if_index)
             return 0;
 
+    INFO("%d", bvm->ifindex);
+
     mnl_attr_for_each(attr, n, sizeof(*bvm))
     {
         struct nlattr *tb[BRIDGE_VLANDB_ENTRY_MAX +1];
@@ -380,6 +386,8 @@ static int vlan_table_cb(const struct nlmsghdr *n, void *data)
 
         if (!range)
             range = info->vid;
+
+    	INFO("%d %i-%i: %i", bvm->ifindex, info->vid, range, state);
 
         for (i = info->vid; i <= range; i++)
             if_data->vlan_state[i] = state;
