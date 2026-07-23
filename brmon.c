@@ -121,6 +121,8 @@ int br_set_vlan_state(unsigned ifindex, __u16 vid, __u8 state)
     bvm->family = AF_BRIDGE;
     bvm->ifindex = ifindex;
 
+    vlan_info.vid = vid;
+    vlan_info.flags = BRIDGE_VLAN_INFO_ONLY_OPTS;
 
     entry = mnl_attr_nest_start(n, BRIDGE_VLANDB_ENTRY);
     mnl_attr_put(n, BRIDGE_VLANDB_ENTRY_INFO, sizeof(vlan_info), &vlan_info);
